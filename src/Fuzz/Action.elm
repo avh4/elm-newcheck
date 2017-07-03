@@ -103,15 +103,15 @@ run action previousResult =
                         )
 
 
-test : List (Action real test) -> real -> test -> Test
-test actions initialReal initialTestModel =
+test : String -> real -> test -> List (Action real test) -> Test
+test name initialReal initialTestModel actions =
     let
         gen =
             actions
                 |> List.map (\(Action f) -> f)
                 |> Fuzz.oneOf
     in
-    Test.fuzz (Fuzz.list gen) "sdjfksdlfsjk" <|
+    Test.fuzz (Fuzz.list gen) name <|
         \actionDetails ->
             List.foldl
                 run

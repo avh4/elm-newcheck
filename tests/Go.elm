@@ -8,7 +8,10 @@ import Test exposing (..)
 
 runAll : Test
 runAll =
-    Fuzz.Action.test [ getSpec, putSpec ] (emptyBuffer 3) []
+    Fuzz.Action.test "runAll"
+        (emptyBuffer 3)
+        []
+        [ getSpec, putSpec ]
 
 
 getSpec : Action Buffer (List Int)
