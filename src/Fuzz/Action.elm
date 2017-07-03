@@ -1,4 +1,4 @@
-module Fuzz.Action exposing (Action, run)
+module Fuzz.Action exposing (Action, test)
 
 
 type alias Action real test =
@@ -22,10 +22,6 @@ run action previousResult =
             previousResult
 
         Ok ( real, test ) ->
-            let
-                _ =
-                    Debug.log "Running action" action.name
-            in
             -- TODO: check precondition
             case action.go real test of
                 ( _, _, Err reason ) ->
@@ -33,4 +29,12 @@ run action previousResult =
 
                 ( newReal, newTest, Ok () ) ->
                     Ok ( newReal, newTest )
-                        |> Debug.log "done"
+
+
+test : List (Action real test) -> real -> test -> Result String ()
+test actions initialReal initialTestModel =
+    List.foldl
+        run
+        (Ok ( initialReal, initialTestModel ))
+        actions
+        |> Result.map (always ())

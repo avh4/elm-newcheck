@@ -7,16 +7,6 @@ import Fuzz.Action exposing (Action)
 import Test exposing (..)
 
 
-runTest : List (Action real test) -> real -> test -> Result String ()
-runTest actions initialReal initialTestModel =
-    List.foldl
-        Fuzz.Action.run
-        (Ok ( initialReal, initialTestModel ))
-        actions
-        |> Result.map (always ())
-
-
-
 -- case actions of
 --     a1 :: a2 :: _ ->
 --         Ok ( initialReal, initialTestModel, Random.initialSeed 1 )
@@ -35,7 +25,7 @@ runAll : Test
 runAll =
     fuzz (Fuzz.list action) "runAll" <|
         \actions ->
-            runTest actions (emptyBuffer 3) []
+            Fuzz.Action.test actions (emptyBuffer 3) []
                 |> Expect.equal (Ok ())
 
 
