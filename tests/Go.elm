@@ -26,7 +26,6 @@ runAll =
     fuzz (Fuzz.list action) "runAll" <|
         \actions ->
             Fuzz.Action.test actions (emptyBuffer 3) []
-                |> Expect.equal (Ok ())
 
 
 action : Fuzz.Fuzzer (Action Buffer (List Int))

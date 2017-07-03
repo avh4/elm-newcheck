@@ -1,5 +1,7 @@
 module Fuzz.Action exposing (Action, test)
 
+import Expect exposing (Expectation)
+
 
 type alias Action real test =
     { name : String
@@ -31,10 +33,11 @@ run action previousResult =
                     Ok ( newReal, newTest )
 
 
-test : List (Action real test) -> real -> test -> Result String ()
+test : List (Action real test) -> real -> test -> Expectation
 test actions initialReal initialTestModel =
     List.foldl
         run
         (Ok ( initialReal, initialTestModel ))
         actions
         |> Result.map (always ())
+        |> Expect.equal (Ok ())
