@@ -6,50 +6,9 @@ import Fuzz.Action exposing (Action)
 import Test exposing (..)
 
 
--- case actions of
---     a1 :: a2 :: _ ->
---         Ok ( initialReal, initialTestModel, Random.initialSeed 1 )
---             |> Fuzz.Action.run a2
---             |> Fuzz.Action.run a1
---             |> Fuzz.Action.run a2
---             |> Fuzz.Action.run a2
---             |> Fuzz.Action.run a1
---             |> Result.map (always ())
---
---     _ ->
---         Debug.crash "TODO: implement for variable number of actions"
-
-
 runAll : Test
 runAll =
-    fuzz (Fuzz.list action) "runAll" <|
-        \actions ->
-            Fuzz.Action.test actions (emptyBuffer 3) []
-
-
-action : Fuzz.Fuzzer (Action Buffer (List Int))
-action =
-    Fuzz.oneOf
-        [ Fuzz.constant getSpec
-        , putSpec
-        ]
-
-
-
--- runTest
---     [ putSpec 890
---     , getSpec
---     , putSpec 111
---     , putSpec 222
---     , getSpec
---     ]
---     (emptyBuffer 3)
---     []
---     |> toString
---     |> Html.text
--- type TestResult
---     = GetResult ( Maybe Int, Buffer )
---     | PutResult Buffer
+    Fuzz.Action.test [ getSpec, putSpec ] (emptyBuffer 3) []
 
 
 getSpec : Action Buffer (List Int)
@@ -59,10 +18,12 @@ getSpec =
         , pre = \model -> not <| List.isEmpty model
         , action = get
         , test = \t -> ( List.head t, List.tail t |> Maybe.withDefault [] )
+
+        -- TODO: combine with the precondition so we can safely destructure
         }
 
 
-putSpec : Fuzz.Fuzzer (Action Buffer (List Int))
+putSpec : Action Buffer (List Int)
 putSpec =
     Fuzz.Action.modify1
         { name = "put"

@@ -2,14 +2,18 @@ module Fuzz.Action exposing (Action, modify1, readAndModify0, test)
 
 import Expect exposing (Expectation)
 import Fuzz exposing (Fuzzer)
+import Test exposing (Test)
 
 
 type Action real test
-    = Action
-        { name : String
-        , pre : test -> Bool
-        , go : real -> test -> Result String ( real, test )
-        }
+    = Action (Fuzzer (ActionDetails real test))
+
+
+type alias ActionDetails real test =
+    { name : String
+    , pre : test -> Bool
+    , go : real -> test -> Result String ( real, test )
+    }
 
 
 modify1 :
@@ -19,20 +23,20 @@ modify1 :
     , arg : Fuzzer arg
     , test : arg -> test -> Result String test
     }
-    -> Fuzzer (Action real test)
+    -> Action real test
 modify1 config =
     let
         a arg =
-            Action
-                { name = config.name ++ " " ++ toString arg
-                , pre = config.pre
-                , go =
-                    \real testModel ->
-                        config.test arg testModel
-                            |> Result.map ((,) (config.action arg real))
-                }
+            { name = config.name ++ " " ++ toString arg
+            , pre = config.pre
+            , go =
+                \real testModel ->
+                    config.test arg testModel
+                        |> Result.map ((,) (config.action arg real))
+            }
     in
     Fuzz.map a config.arg
+        |> Action
 
 
 readAndModify0 :
@@ -43,23 +47,24 @@ readAndModify0 :
     }
     -> Action real test
 readAndModify0 config =
-    Action
-        { name = config.name
-        , pre = config.pre
-        , go =
-            \real testModel ->
-                let
-                    ( actual, newReal ) =
-                        config.action real
+    { name = config.name
+    , pre = config.pre
+    , go =
+        \real testModel ->
+            let
+                ( actual, newReal ) =
+                    config.action real
 
-                    ( expected, newTest ) =
-                        config.test testModel
-                in
-                if actual == expected then
-                    Ok ( newReal, newTest )
-                else
-                    Err <| "expected " ++ toString expected ++ ", but got: " ++ toString actual
-        }
+                ( expected, newTest ) =
+                    config.test testModel
+            in
+            if actual == expected then
+                Ok ( newReal, newTest )
+            else
+                Err <| "expected " ++ toString expected ++ ", but got: " ++ toString actual
+    }
+        |> Fuzz.constant
+        |> Action
 
 
 type alias StepValue real test =
@@ -76,10 +81,10 @@ type alias Log test =
 
 
 run :
-    Action real test
+    ActionDetails real test
     -> Result ( String, String, Log test ) (StepValue real test)
     -> Result ( String, String, Log test ) (StepValue real test)
-run (Action action) previousResult =
+run action previousResult =
     case previousResult of
         Err _ ->
             previousResult
@@ -98,13 +103,21 @@ run (Action action) previousResult =
                         )
 
 
-test : List (Action real test) -> real -> test -> Expectation
+test : List (Action real test) -> real -> test -> Test
 test actions initialReal initialTestModel =
-    List.foldl
-        run
-        (Ok ( initialReal, initialTestModel, Log initialTestModel [] ))
-        actions
-        |> showResult
+    let
+        gen =
+            actions
+                |> List.map (\(Action f) -> f)
+                |> Fuzz.oneOf
+    in
+    Test.fuzz (Fuzz.list gen) "sdjfksdlfsjk" <|
+        \actionDetails ->
+            List.foldl
+                run
+                (Ok ( initialReal, initialTestModel, Log initialTestModel [] ))
+                actionDetails
+                |> showResult
 
 
 showResult : Result ( String, String, Log test ) (StepValue real test) -> Expectation
