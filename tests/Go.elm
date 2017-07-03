@@ -1,7 +1,6 @@
 module Go exposing (..)
 
 import Array exposing (Array)
-import Expect
 import Fuzz
 import Fuzz.Action exposing (Action)
 import Test exposing (..)
@@ -32,7 +31,7 @@ action : Fuzz.Fuzzer (Action Buffer (List Int))
 action =
     Fuzz.oneOf
         [ Fuzz.constant getSpec
-        , Fuzz.map putSpec Fuzz.int
+        , putSpec
         ]
 
 
@@ -55,50 +54,23 @@ action =
 
 getSpec : Action Buffer (List Int)
 getSpec =
-    { name = "get"
-    , pre = \real model -> not <| List.isEmpty model
-
-    -- , realAction = \buffer -> get buffer
-    -- , testAction = \testModel -> List.tail testModel
-    -- , post =
-    --     \( getValue, newBuffer ) testModel ->
-    --         List.head testModel == getValue
-    , go =
-        \buffer testModel ->
-            let
-                result =
-                    get buffer
-
-                ( getValue, newBuffer ) =
-                    result
-            in
-            ( newBuffer
-            , List.tail testModel |> Maybe.withDefault []
-            , if List.head testModel == getValue then
-                Ok ()
-              else
-                Err <| "expected " ++ toString (List.head testModel) ++ ", but got: " ++ toString getValue
-            )
-    }
+    Fuzz.Action.readAndModify0
+        { name = "get"
+        , pre = \model -> not <| List.isEmpty model
+        , action = get
+        , test = \t -> ( List.head t, List.tail t |> Maybe.withDefault [] )
+        }
 
 
-putSpec : Int -> Action Buffer (List Int)
-putSpec arg =
-    { name = "put " ++ toString arg
-    , pre = \buffer testModel -> True
-    , go =
-        \buffer testModel ->
-            let
-                -- ( arg, newSeed ) =
-                --     Random.step (Random.int Random.minInt Random.maxInt) seed
-                result =
-                    put arg buffer
-            in
-            ( result
-            , testModel ++ [ arg ]
-            , Ok ()
-            )
-    }
+putSpec : Fuzz.Fuzzer (Action Buffer (List Int))
+putSpec =
+    Fuzz.Action.modify1
+        { name = "put"
+        , pre = always True
+        , action = put
+        , arg = Fuzz.int
+        , test = \a t -> Ok (t ++ [ a ])
+        }
 
 
 type Buffer

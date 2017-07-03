@@ -1,17 +1,65 @@
-module Fuzz.Action exposing (Action, test)
+module Fuzz.Action exposing (Action, modify1, readAndModify0, test)
 
 import Expect exposing (Expectation)
+import Fuzz exposing (Fuzzer)
 
 
-type alias Action real test =
+type Action real test
+    = Action
+        { name : String
+        , pre : test -> Bool
+        , go : real -> test -> Result String ( real, test )
+        }
+
+
+modify1 :
     { name : String
-    , pre : real -> test -> Bool
-    , go : real -> test -> ( real, test, Result String () )
-
-    -- , realAction : real -> result
-    -- , testAction : test -> test
-    -- , post : result -> test -> Bool
+    , pre : test -> Bool
+    , action : arg -> real -> real
+    , arg : Fuzzer arg
+    , test : arg -> test -> Result String test
     }
+    -> Fuzzer (Action real test)
+modify1 config =
+    let
+        a arg =
+            Action
+                { name = config.name ++ " " ++ toString arg
+                , pre = config.pre
+                , go =
+                    \real testModel ->
+                        config.test arg testModel
+                            |> Result.map ((,) (config.action arg real))
+                }
+    in
+    Fuzz.map a config.arg
+
+
+readAndModify0 :
+    { name : String
+    , pre : test -> Bool
+    , action : real -> ( result, real )
+    , test : test -> ( result, test )
+    }
+    -> Action real test
+readAndModify0 config =
+    Action
+        { name = config.name
+        , pre = config.pre
+        , go =
+            \real testModel ->
+                let
+                    ( actual, newReal ) =
+                        config.action real
+
+                    ( expected, newTest ) =
+                        config.test testModel
+                in
+                if actual == expected then
+                    Ok ( newReal, newTest )
+                else
+                    Err <| "expected " ++ toString expected ++ ", but got: " ++ toString actual
+        }
 
 
 type alias StepValue real test =
@@ -31,7 +79,7 @@ run :
     Action real test
     -> Result ( String, String, Log test ) (StepValue real test)
     -> Result ( String, String, Log test ) (StepValue real test)
-run action previousResult =
+run (Action action) previousResult =
     case previousResult of
         Err _ ->
             previousResult
@@ -39,10 +87,10 @@ run action previousResult =
         Ok ( real, test, log ) ->
             -- TODO: check precondition
             case action.go real test of
-                ( _, _, Err reason ) ->
+                Err reason ->
                     Err ( action.name, reason, log )
 
-                ( newReal, newTest, Ok () ) ->
+                Ok ( newReal, newTest ) ->
                     Ok
                         ( newReal
                         , newTest
