@@ -3,15 +3,14 @@ module Go exposing (..)
 import Array exposing (Array)
 import Expect
 import Fuzz
-import Html
-import Random
+import Fuzz.Action exposing (Action)
 import Test exposing (..)
 
 
-runTest : List (ActionSpec real test) -> real -> test -> Result String ()
+runTest : List (Action real test) -> real -> test -> Result String ()
 runTest actions initialReal initialTestModel =
     List.foldl
-        runAction
+        Fuzz.Action.run
         (Ok ( initialReal, initialTestModel ))
         actions
         |> Result.map (always ())
@@ -21,39 +20,15 @@ runTest actions initialReal initialTestModel =
 -- case actions of
 --     a1 :: a2 :: _ ->
 --         Ok ( initialReal, initialTestModel, Random.initialSeed 1 )
---             |> runAction a2
---             |> runAction a1
---             |> runAction a2
---             |> runAction a2
---             |> runAction a1
+--             |> Fuzz.Action.run a2
+--             |> Fuzz.Action.run a1
+--             |> Fuzz.Action.run a2
+--             |> Fuzz.Action.run a2
+--             |> Fuzz.Action.run a1
 --             |> Result.map (always ())
 --
 --     _ ->
 --         Debug.crash "TODO: implement for variable number of actions"
-
-
-runAction :
-    ActionSpec real test
-    -> Result String ( real, test )
-    -> Result String ( real, test )
-runAction action previousResult =
-    case previousResult of
-        Err _ ->
-            previousResult
-
-        Ok ( real, test ) ->
-            let
-                _ =
-                    Debug.log "Running action" action.name
-            in
-            -- TODO: check precondition
-            case action.go real test of
-                ( _, _, Err reason ) ->
-                    Err ("Post condition failed: " ++ action.name ++ "\n" ++ reason)
-
-                ( newReal, newTest, Ok () ) ->
-                    Ok ( newReal, newTest )
-                        |> Debug.log "done"
 
 
 runAll : Test
@@ -64,7 +39,7 @@ runAll =
                 |> Expect.equal (Ok ())
 
 
-action : Fuzz.Fuzzer (ActionSpec Buffer (List Int))
+action : Fuzz.Fuzzer (Action Buffer (List Int))
 action =
     Fuzz.oneOf
         [ Fuzz.constant getSpec
@@ -84,26 +59,12 @@ action =
 --     []
 --     |> toString
 --     |> Html.text
-
-
-type alias ActionSpec real test =
-    { name : String
-    , pre : real -> test -> Bool
-    , go : real -> test -> ( real, test, Result String () )
-
-    -- , realAction : real -> result
-    -- , testAction : test -> test
-    -- , post : result -> test -> Bool
-    }
-
-
-
 -- type TestResult
 --     = GetResult ( Maybe Int, Buffer )
 --     | PutResult Buffer
 
 
-getSpec : ActionSpec Buffer (List Int)
+getSpec : Action Buffer (List Int)
 getSpec =
     { name = "get"
     , pre = \real model -> not <| List.isEmpty model
@@ -132,7 +93,7 @@ getSpec =
     }
 
 
-putSpec : Int -> ActionSpec Buffer (List Int)
+putSpec : Int -> Action Buffer (List Int)
 putSpec arg =
     { name = "put " ++ toString arg
     , pre = \buffer testModel -> True
