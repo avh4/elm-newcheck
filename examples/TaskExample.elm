@@ -20,50 +20,35 @@ type alias TestRepr =
 
 type alias Model test =
     { runs : List (Log test)
-    , remaining : Int
     }
 
 
 initialModel : Model test
 initialModel =
     { runs = []
-    , remaining = 100
     }
 
 
 type Msg test
-    = RunComplete ( Log test, Random.Pcg.Seed )
+    = RunComplete Int ( Log test, Random.Pcg.Seed )
 
 
 update : Msg TestRepr -> Model TestRepr -> ( Model TestRepr, Cmd (Msg TestRepr) )
 update msg model =
     case msg of
-        RunComplete ( log, newSeed ) ->
-            model
-                |> addRun log
-                |> runNext newSeed
+        RunComplete remaining ( log, newSeed ) ->
+            ( { model | runs = log :: model.runs }
+            , runNext remaining newSeed
+            )
 
 
-addRun : Log test -> Model test -> Model test
-addRun log model =
-    -- if log.failure == Nothing then
-    --     { model | remaining = model.remaining + 1 }
-    -- else
-    { model | runs = log :: model.runs }
-
-
-runNext : Random.Pcg.Seed -> Model TestRepr -> ( Model TestRepr, Cmd (Msg TestRepr) )
-runNext seed model =
-    if model.remaining <= 0 then
-        ( { model | remaining = 0 }
-        , Cmd.none
-        )
+runNext : Int -> Random.Pcg.Seed -> Cmd (Msg TestRepr)
+runNext remaining seed =
+    if remaining <= 0 then
+        Cmd.none
     else
-        ( { model | remaining = model.remaining - 1 }
-        , go seed
-            |> Task.perform RunComplete
-          -- |> (\( task, newSeed ) -> Task.perform (\x -> RunComplete ( x, newSeed ) task))
-        )
+        go seed
+            |> Task.perform (RunComplete (remaining - 1))
 
 
 go =
@@ -94,7 +79,7 @@ main =
         { init =
             ( initialModel
             , go (Random.Pcg.initialSeed 0)
-                |> Task.perform RunComplete
+                |> Task.perform (RunComplete 100)
             )
         , update = update
         , subscriptions = \model -> Sub.none
