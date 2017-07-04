@@ -1,11 +1,30 @@
 module Fuzz.Action exposing (Action, modify1, readAndModify0, test)
 
+{-| This lets you define action specifications that compare
+manipulations of a real data structure with a test model.
+
+If you need to test a system that involves `Task`s, see `Fuzz.Action.Task`.
+
+
+## Creating
+
+@docs Action, modify1, readAndModify0
+
+
+## Evaluating
+
+@docs test
+
+-}
+
 import Expect exposing (Expectation)
 import Fuzz exposing (Fuzzer)
 import Fuzz.Action.Log as Log exposing (Log)
 import Test exposing (Test)
 
 
+{-| A specification for an action to be tested with [`Fuzz.Action.test`](#test).
+-}
 type Action real test
     = Action (Fuzzer (ActionDetails real test))
 
@@ -17,6 +36,13 @@ type alias ActionDetails real test =
     }
 
 
+{-| Creates a specification for a function of type `arg1 -> real -> real`.
+
+That is, an action specification for an action
+that takes one argument in addition to the primary data type,
+and returns a new value of the primary data type.
+
+-}
 modify1 :
     { name : String
     , pre : test -> Bool
@@ -40,6 +66,13 @@ modify1 config =
         |> Action
 
 
+{-| Creates a specification for a function of type `real -> (result, real)`.
+
+That is, an action specification for an action
+that takes no arguments other than the primary data type,
+and returns both a result and a new value of the primary data type.
+
+-}
 readAndModify0 :
     { name : String
     , pre : test -> Bool
@@ -92,6 +125,9 @@ run action previousResult =
                         )
 
 
+{-| Creates a fuzz test that ensures that randomly-chosen sequences of actions
+produce the same results when applied to the real and test models.
+-}
 test : String -> real -> test -> List (Action real test) -> Test
 test name initialReal initialTestModel actions =
     let

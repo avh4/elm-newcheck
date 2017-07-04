@@ -1,5 +1,24 @@
 module Fuzz.Action.Task exposing (Action, modify1, readAndModify0, test)
 
+{-| This lets you define action specifications that compare the result of
+`Tasks` with a test model.
+
+**NOTE**: You probably want to use `Fuzz.Action.Program.program`
+instead of using this module directly if you want the
+easiest way to evaluate Task-based action specifications.
+
+
+## Creating
+
+@docs Action, modify1, readAndModify0
+
+
+## Evaluating
+
+@docs test
+
+-}
+
 import Fuzz exposing (Fuzzer)
 import Fuzz.Action.Log as Log exposing (Log)
 import Random.Pcg
@@ -7,6 +26,8 @@ import Task exposing (Task)
 import Test.Runner
 
 
+{-| A specification for a task-based action to be tested with [`Fuzz.Action.Task.test`](#test).
+-}
 type Action real test
     = Action (Fuzzer (ActionDetails real test))
 
@@ -18,6 +39,13 @@ type alias ActionDetails real test =
     }
 
 
+{-| Creates a specification for a function of type `arg1 -> real -> Task Never real`.
+
+That is, a task-based action specification for an action
+that takes one argument in addition to the primary data type,
+and returns a new value of the primary data type.
+
+-}
 modify1 :
     { name : String
     , pre : test -> Bool
@@ -46,6 +74,13 @@ modify1 config =
         |> Action
 
 
+{-| Creates a specification for a function of type `real -> Task Never (result, real)`.
+
+That is, a task-based action specification for an action
+that takes no arguments other than the primary data type,
+and returns both a result and a new value of the primary data type.
+
+-}
 readAndModify0 :
     { name : String
     , pre : test -> Bool
@@ -99,6 +134,18 @@ run action previousResult =
                     )
 
 
+{-| Execute a single fuzz test iteration. Returns a task that does the following:
+
+  - Generates a random sequence of actions from the provided list of action specifications
+  - Evaluates each action, asserting that the results from the test model match the real results
+  - If the evaluation fails:
+      - Tries to shrink the sequence to find the minimal failing example
+      - Returns the test log of the minimal failing example
+        (with `log.failure = Just (<last action>, <assertion failure>)`)
+  - If the evaluation succeeds:
+      - Returns the test log of the evaluation (with `log.failure = Nothing`)
+
+-}
 test : real -> test -> List (Action real test) -> Random.Pcg.Seed -> ( Task Never (Log test), Random.Pcg.Seed )
 test initialReal initialTestModel actions seed =
     -- TODO: use Random.Seed

@@ -1,4 +1,10 @@
-module Fuzz.Action.Program exposing (defaultStyles, program)
+module Fuzz.Action.Program exposing (Config, program)
+
+{-| An easy-to-use program for evaluating `Fuzz.Action.Task` specifications.
+
+@docs program, Config
+
+-}
 
 import Color
 import Element exposing (Element)
@@ -51,6 +57,15 @@ go config =
         >> (\( task, newSeed ) -> task |> Task.map (flip (,) newSeed))
 
 
+{-|
+
+  - `seed`: The initial seed for the test run
+  - `fuzz`: The number of fuzz test iterations to run
+  - `real`: The initial state of the real system being tested
+  - `test`: The initial state of the test model
+  - `actions`: The action specifications to use in the fuzz test
+
+-}
 type alias Config real test =
     { seed : Int
     , fuzz : Int
@@ -60,6 +75,8 @@ type alias Config real test =
     }
 
 
+{-| See [`Config`](#Config)
+-}
 program : Config real test -> Program Never (Model test) (Msg test)
 program config =
     Html.program
