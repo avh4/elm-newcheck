@@ -83,13 +83,13 @@ type alias StepValue real test =
 run :
     ActionDetails real test
     -> StepValue real test
-    -> Task ( String, String, Log test ) (StepValue real test)
+    -> Task (Log test) (StepValue real test)
 run action previousResult =
     case previousResult of
         ( real, test, log ) ->
             -- TODO: check precondition
             action.go real test
-                |> Task.mapError (\reason -> ( action.name, reason, log ))
+                |> Task.mapError (\reason -> { log | failure = Just ( action.name, reason ) })
                 |> Task.map
                     (\( newReal, newTest ) ->
                         ( newReal
@@ -114,7 +114,7 @@ test initialReal initialTestModel actions seed =
         ( ( first, shrink ), newSeed ) =
             Random.Pcg.step fuzzGen seed
 
-        runOne : List (ActionDetails real test) -> Task Never (Result ( String, String, Log test ) (Log test))
+        runOne : List (ActionDetails real test) -> Task Never (Result (Log test) (Log test))
         runOne actionDetails =
             List.foldl
                 (\a prev -> prev |> Task.andThen (run a))
@@ -125,13 +125,7 @@ test initialReal initialTestModel actions seed =
 
         runShrink shrink result =
             case result of
-                Err ( name, message, log ) ->
-                    let
-                        failureLog =
-                            { log
-                                | failure = Just ( name, message )
-                            }
-                    in
+                Err failureLog ->
                     case Test.Runner.shrink False shrink of
                         Nothing ->
                             Task.succeed failureLog
