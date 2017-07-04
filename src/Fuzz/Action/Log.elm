@@ -12,17 +12,18 @@ Use for display if the test fails.
 
   - `init`: The initial test model
   - `steps`: The list of actions performed
-      - `(name, _)`: The name of the action
-      - `(_, testModel)`: The test model after applying the action
+      - `name`: The name of the action
+      - `output`: The
+      - `testModel`: The test model after applying the action
   - `failure`: One of
       - `Nothing`: The test execution completed successfully
-      - `Just (name, message)`: The name of the action that failed, and the failure message
+      - `Just { name, message }`: The name of the action that failed, and the failure message
 
 -}
 type alias Log test =
     { init : test
-    , steps : List ( String, test )
-    , failure : Maybe ( String, String )
+    , steps : List { name : String, output : Maybe String, testModel : test }
+    , failure : Maybe { name : String, message : String }
     }
 
 

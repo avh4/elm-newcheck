@@ -104,6 +104,7 @@ view model =
 
 type Class
     = TestRuns
+    | TestRunContainer
     | TestRun
     | Log
     | LogInit
@@ -111,6 +112,7 @@ type Class
     | LogStep
     | LogStepName
     | LogStepModel
+    | LogStepOutput
 
 
 type Variation
@@ -126,16 +128,18 @@ viewRun log =
         , padding 8
         ]
         (viewLog log)
+        |> Element.el TestRunContainer [ padding 2 ]
 
 
 viewLog : Log test -> Element Class Variation msg
 viewLog log =
     let
-        viewStep ( name, testModel ) =
+        viewStep { name, testModel, output } =
             Element.row LogStep
                 []
                 [ Element.el LogStepName [ width <| fill 1 ] (Element.text name)
                 , Element.el LogStepModel [ width <| fill 1 ] (Element.text <| toString testModel)
+                , Element.el LogStepOutput [ width <| fill 1 ] (Element.text <| toString output)
                 ]
     in
     Element.column Log

@@ -32,7 +32,7 @@ type Action real test
 type alias ActionDetails real test =
     { name : String
     , pre : test -> Bool
-    , go : real -> test -> Result String ( real, test )
+    , go : real -> test -> Result String ( real, test, Maybe String )
     }
 
 
@@ -59,7 +59,7 @@ modify1 config =
             , go =
                 \real testModel ->
                     config.test arg testModel
-                        |> Result.map ((,) (config.action arg real))
+                        |> Result.map (\x -> ( config.action arg real, x, Nothing ))
             }
     in
     Fuzz.map a config.arg
@@ -93,7 +93,7 @@ readAndModify0 config =
                     config.test testModel
             in
             if actual == expected then
-                Ok ( newReal, newTest )
+                Ok ( newReal, newTest, Just (toString actual) )
             else
                 Err <| "expected " ++ toString expected ++ ", but got: " ++ toString actual
     }
@@ -115,13 +115,13 @@ run action previousResult =
             -- TODO: check precondition
             case action.go real test of
                 Err reason ->
-                    Err { log | failure = Just ( action.name, reason ) }
+                    Err { log | failure = Just { name = action.name, message = reason } }
 
-                Ok ( newReal, newTest ) ->
+                Ok ( newReal, newTest, output ) ->
                     Ok
                         ( newReal
                         , newTest
-                        , { log | steps = ( action.name, newTest ) :: log.steps }
+                        , { log | steps = { name = action.name, testModel = newTest, output = output } :: log.steps }
                         )
 
 
@@ -156,17 +156,24 @@ test name initialReal initialTestModel actions =
 showResult : Log test -> Expectation
 showResult log =
     let
-        showStep ( step, output ) =
-            step ++ "  -->  " ++ toString output
+        showStep { name, testModel, output } =
+            String.concat
+                [ name
+                , "  -->  "
+                , toString testModel
+                , output
+                    |> Maybe.map (\x -> "  (" ++ x ++ ")")
+                    |> Maybe.withDefault ""
+                ]
     in
     case log.failure of
-        Just ( last, message ) ->
+        Just { name, message } ->
             Expect.fail
-                (showStep ( "<init>", log.init )
+                (showStep { name = "<init>", testModel = log.init, output = Nothing }
                     ++ "\n"
                     ++ String.join "\n" (List.map showStep log.steps)
                     ++ "\n"
-                    ++ last
+                    ++ name
                     ++ "  ==>  FAILED\n\n    "
                     ++ message
                 )

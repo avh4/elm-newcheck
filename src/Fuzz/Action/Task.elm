@@ -35,7 +35,7 @@ type Action real test
 type alias ActionDetails real test =
     { name : String
     , pre : test -> Bool
-    , go : real -> test -> Task String ( real, test )
+    , go : real -> test -> Task String ( real, test, Maybe String )
     }
 
 
@@ -66,7 +66,8 @@ modify1 config =
                             Task.fail message
 
                         Ok newTestModel ->
-                            Task.map (flip (,) newTestModel) (config.action arg real)
+                            config.action arg real
+                                |> Task.map (\real -> ( real, newTestModel, Nothing ))
                                 |> Task.mapError never
             }
     in
@@ -102,7 +103,7 @@ readAndModify0 config =
                                 config.test testModel
                         in
                         if actual == expected then
-                            Task.succeed ( newReal, newTest )
+                            Task.succeed ( newReal, newTest, Just <| toString actual )
                         else
                             Task.fail <| "expected " ++ toString expected ++ ", but got: " ++ toString actual
                     )
@@ -124,12 +125,12 @@ run action previousResult =
         ( real, test, log ) ->
             -- TODO: check precondition
             action.go real test
-                |> Task.mapError (\reason -> { log | failure = Just ( action.name, reason ) })
+                |> Task.mapError (\reason -> { log | failure = Just { name = action.name, message = reason } })
                 |> Task.map
-                    (\( newReal, newTest ) ->
+                    (\( newReal, newTest, output ) ->
                         ( newReal
                         , newTest
-                        , { log | steps = ( action.name, newTest ) :: log.steps }
+                        , { log | steps = { name = action.name, output = output, testModel = newTest } :: log.steps }
                         )
                     )
 
