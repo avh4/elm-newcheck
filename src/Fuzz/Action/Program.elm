@@ -84,7 +84,7 @@ program config =
             ( initialModel
             , go config
                 (Random.Pcg.initialSeed config.seed)
-                |> Task.perform (RunComplete config.fuzz)
+                |> Task.perform (RunComplete (config.fuzz - 1))
             )
         , update = update config
         , subscriptions = \model -> Sub.none
