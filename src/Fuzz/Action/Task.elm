@@ -1,4 +1,4 @@
-module Fuzz.Action.Task exposing (Action, modify1, readAndModify0, test)
+module Fuzz.Action.Task exposing (Action, modify1, readAndModify0, readAndModify1, test)
 
 {-| This lets you define action specifications that compare the result of
 `Tasks` with a test model.
@@ -10,7 +10,9 @@ easiest way to evaluate Task-based action specifications.
 
 ## Creating
 
-@docs Action, modify1, readAndModify0
+@docs Action
+@docs modify1
+@docs readAndModify0, readAndModify1
 
 
 ## Evaluating
@@ -109,6 +111,47 @@ readAndModify0 config =
                     )
     }
         |> Fuzz.constant
+        |> Action
+
+
+{-| Creates a specification for a function of type `arg1 -> real -> Task Never (result, real)`.
+
+That is, a task-based action specification for an action
+that takes one argument in addition to the primary data type,
+and returns both a result and a new value of the primary data type.
+
+-}
+readAndModify1 :
+    { name : String
+    , pre : test -> Bool
+    , arg : Fuzzer arg
+    , action : arg -> real -> Task Never ( result, real )
+    , test : arg -> test -> ( result, test )
+    }
+    -> Action real test
+readAndModify1 config =
+    let
+        a arg =
+            { name = config.name ++ " " ++ toString arg
+            , pre = config.pre
+            , go =
+                \real testModel ->
+                    config.action arg real
+                        |> Task.mapError never
+                        |> Task.andThen
+                            (\( actual, newReal ) ->
+                                let
+                                    ( expected, newTest ) =
+                                        config.test arg testModel
+                                in
+                                if actual == expected then
+                                    Task.succeed ( newReal, newTest, Just <| toString actual )
+                                else
+                                    Task.fail <| "expected " ++ toString expected ++ ", but got: " ++ toString actual
+                            )
+            }
+    in
+    Fuzz.map a config.arg
         |> Action
 
 
