@@ -61,7 +61,7 @@ go config =
 
   - `seed`: The initial seed for the test run
   - `fuzz`: The number of fuzz test iterations to run
-  - `real`: The initial state of the real system being tested
+  - `real`: A Task to initialize the real system being tested
   - `test`: The initial state of the test model
   - `actions`: The action specifications to use in the fuzz test
 
@@ -69,7 +69,7 @@ go config =
 type alias Config real test =
     { seed : Int
     , fuzz : Int
-    , real : real
+    , real : Task String real
     , test : test
     , actions : List (Action real test)
     }

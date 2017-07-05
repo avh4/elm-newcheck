@@ -205,7 +205,7 @@ run action previousResult =
       - Returns the test log of the evaluation (with `log.failure = Nothing`)
 
 -}
-test : real -> test -> List (Action real test) -> Random.Pcg.Seed -> ( Task Never (Log test), Random.Pcg.Seed )
+test : Task String real -> test -> List (Action real test) -> Random.Pcg.Seed -> ( Task Never (Log test), Random.Pcg.Seed )
 test initialReal initialTestModel actions seed =
     -- TODO: use Random.Seed
     let
@@ -224,7 +224,16 @@ test initialReal initialTestModel actions seed =
         runOne actionDetails =
             List.foldl
                 (\a prev -> prev |> Task.andThen (run a))
-                (Task.succeed ( initialReal, initialTestModel, Log.empty initialTestModel ))
+                (initialReal
+                    |> Task.map (\real -> ( real, initialTestModel, Log.empty initialTestModel ))
+                    |> Task.mapError
+                        (\reason ->
+                            { init = initialTestModel
+                            , steps = []
+                            , failure = Just { name = "<init>", message = reason }
+                            }
+                        )
+                )
                 actionDetails
                 |> Task.map (\( _, _, log ) -> Ok log)
                 |> Task.onError (Err >> Task.succeed)
