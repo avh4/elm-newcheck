@@ -36,7 +36,7 @@ type Action real test
 
 type alias ActionDetails real test =
     { name : String
-    , pre : test -> Bool
+    , pre : test -> Result String ()
     , go : real -> test -> Task String ( real, test, Maybe String )
     }
 
@@ -50,7 +50,7 @@ and returns a new value of the primary data type.
 -}
 modify1 :
     { name : String
-    , pre : test -> Bool
+    , pre : arg -> test -> Result String ()
     , action : arg -> real -> Task Never real
     , arg : Fuzzer arg
     , test : arg -> test -> Result String test
@@ -60,7 +60,7 @@ modify1 config =
     let
         a arg =
             { name = config.name ++ " " ++ toString arg
-            , pre = config.pre
+            , pre = config.pre arg
             , go =
                 \real testModel ->
                     case config.test arg testModel of
@@ -86,7 +86,7 @@ and returns both a result and a new value of the primary data type.
 -}
 readAndModify0 :
     { name : String
-    , pre : test -> Bool
+    , pre : test -> Result String ()
     , action : real -> Task Never ( result, real )
     , test : test -> ( result, test )
     }
@@ -123,7 +123,7 @@ and returns both a result and a new value of the primary data type.
 -}
 readAndModify1 :
     { name : String
-    , pre : test -> Bool
+    , pre : arg -> test -> Result String ()
     , arg : Fuzzer arg
     , action : arg -> real -> Task Never ( result, real )
     , test : arg -> test -> ( result, test )
@@ -133,7 +133,7 @@ readAndModify1 config =
     let
         a arg =
             { name = config.name ++ " " ++ toString arg
-            , pre = config.pre
+            , pre = config.pre arg
             , go =
                 \real testModel ->
                     config.action arg real
@@ -166,16 +166,31 @@ run :
 run action previousResult =
     case previousResult of
         ( real, test, log ) ->
-            -- TODO: check precondition
-            action.go real test
-                |> Task.mapError (\reason -> { log | failure = Just { name = action.name, message = reason } })
-                |> Task.map
-                    (\( newReal, newTest, output ) ->
-                        ( newReal
-                        , newTest
-                        , { log | steps = { name = action.name, output = output, testModel = newTest } :: log.steps }
+            case action.pre test of
+                Ok () ->
+                    action.go real test
+                        |> Task.mapError (\reason -> { log | failure = Just { name = action.name, message = reason } })
+                        |> Task.map
+                            (\( newReal, newTest, output ) ->
+                                ( newReal
+                                , newTest
+                                , { log | steps = { name = action.name, output = output, testModel = newTest } :: log.steps }
+                                )
+                            )
+
+                Err reason ->
+                    Task.succeed
+                        ( real
+                        , test
+                        , { log
+                            | steps =
+                                { name = action.name ++ " (skipped; precondition failed; " ++ reason ++ ")"
+                                , output = Nothing
+                                , testModel = test
+                                }
+                                    :: log.steps
+                          }
                         )
-                    )
 
 
 {-| Execute a single fuzz test iteration. Returns a task that does the following:
