@@ -113,6 +113,7 @@ type Class
     | LogStepName
     | LogStepModel
     | LogStepOutput
+    | LogFailure
 
 
 type Variation
@@ -141,11 +142,19 @@ viewLog log =
                 , Element.el LogStepModel [ width <| fill 1 ] (Element.text <| toString testModel)
                 , Element.el LogStepOutput [ width <| fill 1 ] (Element.text <| toString output)
                 ]
+
+        viewFailure { name, message } =
+            Element.row LogFailure
+                []
+                [ Element.el LogStepName [ width <| fill 1 ] (Element.text name)
+                , Element.el LogStepOutput [ width <| fill 1 ] (Element.text message)
+                ]
     in
     Element.column Log
         []
         [ Element.el LogInit [] (Element.text <| toString log.init)
         , Element.column LogSteps [] (List.map viewStep log.steps)
+        , log.failure |> Maybe.map viewFailure |> Maybe.withDefault Element.empty
         ]
 
 
