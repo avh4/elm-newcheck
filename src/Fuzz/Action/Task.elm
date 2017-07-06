@@ -1,4 +1,4 @@
-module Fuzz.Action.Task exposing (Action, modify1, readAndModify0, readAndModify1, test)
+module Fuzz.Action.Task exposing (Action, modify1, readAndModify0, readAndModify1, readAndModify2, test)
 
 {-| This lets you define action specifications that compare the result of
 `Tasks` with a test model.
@@ -12,7 +12,7 @@ easiest way to evaluate Task-based action specifications.
 
 @docs Action
 @docs modify1
-@docs readAndModify0, readAndModify1
+@docs readAndModify0, readAndModify1, readAndModify2
 
 
 ## Evaluating
@@ -152,6 +152,53 @@ readAndModify1 config =
             }
     in
     Fuzz.map a config.arg
+        |> Action
+
+
+{-| Creates a specification for a function of type `arg1 -> arg2 -> real -> Task Never (result, real)`.
+
+That is, a task-based action specification for an action
+that takes two arguments in addition to the primary data type,
+and returns both a result and a new value of the primary data type.
+
+-}
+readAndModify2 :
+    { name : String
+    , pre : arg1 -> arg2 -> test -> Result String ()
+    , arg1 : Fuzzer arg1
+    , arg2 : Fuzzer arg2
+    , action : arg1 -> arg2 -> real -> Task Never ( result, real )
+    , test : arg1 -> arg2 -> test -> ( result, test )
+    }
+    -> Action real test
+readAndModify2 config =
+    let
+        a arg1 arg2 =
+            { name =
+                String.join " "
+                    [ config.name
+                    , toString arg1
+                    , toString arg2
+                    ]
+            , pre = config.pre arg1 arg2
+            , go =
+                \real testModel ->
+                    config.action arg1 arg2 real
+                        |> Task.mapError never
+                        |> Task.andThen
+                            (\( actual, newReal ) ->
+                                let
+                                    ( expected, newTest ) =
+                                        config.test arg1 arg2 testModel
+                                in
+                                if actual == expected then
+                                    Task.succeed ( newReal, newTest, Just <| toString actual )
+                                else
+                                    Task.fail <| "expected " ++ toString expected ++ ", but got: " ++ toString actual
+                            )
+            }
+    in
+    Fuzz.map2 a config.arg1 config.arg2
         |> Action
 
 
