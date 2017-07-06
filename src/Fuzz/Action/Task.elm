@@ -92,26 +92,14 @@ readAndModify0 :
     }
     -> Action real test
 readAndModify0 config =
-    { name = config.name
-    , pre = config.pre
-    , go =
-        \real testModel ->
-            config.action real
-                |> Task.mapError never
-                |> Task.andThen
-                    (\( actual, newReal ) ->
-                        let
-                            ( expected, newTest ) =
-                                config.test testModel
-                        in
-                        if actual == expected then
-                            Task.succeed ( newReal, newTest, Just <| toString actual )
-                        else
-                            Task.fail <| "expected " ++ toString expected ++ ", but got: " ++ toString actual
-                    )
-    }
-        |> Fuzz.constant
-        |> Action
+    action
+        { name = config.name
+        , argDesc = always []
+        , arg = Fuzz.constant ()
+        , pre = always config.pre
+        , action = always config.action
+        , test = always config.test
+        }
 
 
 {-| Creates a specification for a function of type `arg1 -> real -> Task Never (result, real)`.
@@ -130,29 +118,14 @@ readAndModify1 :
     }
     -> Action real test
 readAndModify1 config =
-    let
-        a arg =
-            { name = config.name ++ " " ++ toString arg
-            , pre = config.pre arg
-            , go =
-                \real testModel ->
-                    config.action arg real
-                        |> Task.mapError never
-                        |> Task.andThen
-                            (\( actual, newReal ) ->
-                                let
-                                    ( expected, newTest ) =
-                                        config.test arg testModel
-                                in
-                                if actual == expected then
-                                    Task.succeed ( newReal, newTest, Just <| toString actual )
-                                else
-                                    Task.fail <| "expected " ++ toString expected ++ ", but got: " ++ toString actual
-                            )
-            }
-    in
-    Fuzz.map a config.arg
-        |> Action
+    action
+        { name = config.name
+        , argDesc = toString >> List.singleton
+        , arg = config.arg
+        , pre = config.pre
+        , action = config.action
+        , test = config.test
+        }
 
 
 {-| Creates a specification for a function of type `arg1 -> arg2 -> real -> Task Never (result, real)`.
@@ -172,24 +145,42 @@ readAndModify2 :
     }
     -> Action real test
 readAndModify2 config =
+    action
+        { name = config.name
+        , argDesc = \( a, b ) -> [ toString a, toString b ]
+        , arg = Fuzz.map2 (,) config.arg1 config.arg2
+        , pre = \( a, b ) -> config.pre a b
+        , action = \( a, b ) -> config.action a b
+        , test = \( a, b ) -> config.test a b
+        }
+
+
+action :
+    { name : String
+    , argDesc : arg -> List String
+    , arg : Fuzzer arg
+    , pre : arg -> test -> Result String ()
+    , action : arg -> real -> Task Never ( result, real )
+    , test : arg -> test -> ( result, test )
+    }
+    -> Action real test
+action config =
     let
-        a arg1 arg2 =
+        a arg =
             { name =
-                String.join " "
-                    [ config.name
-                    , toString arg1
-                    , toString arg2
-                    ]
-            , pre = config.pre arg1 arg2
+                config.name
+                    ++ " "
+                    ++ (String.join " " <| config.argDesc arg)
+            , pre = config.pre arg
             , go =
                 \real testModel ->
-                    config.action arg1 arg2 real
+                    config.action arg real
                         |> Task.mapError never
                         |> Task.andThen
                             (\( actual, newReal ) ->
                                 let
                                     ( expected, newTest ) =
-                                        config.test arg1 arg2 testModel
+                                        config.test arg testModel
                                 in
                                 if actual == expected then
                                     Task.succeed ( newReal, newTest, Just <| toString actual )
@@ -198,7 +189,8 @@ readAndModify2 config =
                             )
             }
     in
-    Fuzz.map2 a config.arg1 config.arg2
+    config.arg
+        |> Fuzz.map a
         |> Action
 
 
