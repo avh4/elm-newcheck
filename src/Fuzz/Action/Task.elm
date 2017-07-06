@@ -57,24 +57,19 @@ modify1 :
     }
     -> Action real test
 modify1 config =
-    let
-        a arg =
-            { name = config.name ++ " " ++ toString arg
-            , pre = config.pre arg
-            , go =
-                \real testModel ->
-                    case config.test arg testModel of
-                        Err message ->
-                            Task.fail message
+    action
+        { name = config.name
+        , argDesc = toString >> List.singleton
+        , arg = config.arg
+        , pre = config.pre
+        , action = config.action >>> Task.map ((,) ())
+        , test = config.test >>> Result.map ((,) ())
+        }
 
-                        Ok newTestModel ->
-                            config.action arg real
-                                |> Task.map (\real -> ( real, newTestModel, Nothing ))
-                                |> Task.mapError never
-            }
-    in
-    Fuzz.map a config.arg
-        |> Action
+
+(>>>) : (b -> c -> d) -> (d -> x) -> (b -> c -> x)
+(>>>) base f b c =
+    f (base b c)
 
 
 {-| Creates a specification for a function of type `real -> Task Never (result, real)`.
@@ -184,7 +179,14 @@ action config =
 
                                     Ok ( expected, newTest ) ->
                                         if actual == expected then
-                                            Task.succeed ( newReal, newTest, Just <| toString actual )
+                                            Task.succeed
+                                                ( newReal
+                                                , newTest
+                                                , if toString actual == "()" then
+                                                    Nothing
+                                                  else
+                                                    Just (toString actual)
+                                                )
                                         else
                                             Task.fail <| "expected " ++ toString expected ++ ", but got: " ++ toString actual
                             )
