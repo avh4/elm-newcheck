@@ -11,20 +11,25 @@ main =
     Fuzz.Action.Program.program
         { seed = 0
         , fuzz = 100
-        , real = CircularBuffer.empty 3
+        , real = Task.succeed <| CircularBuffer.empty 3
         , test = []
         , actions =
             [ readAndModify0
                 { name = "get"
-                , pre = \model -> not <| List.isEmpty model
+                , pre =
+                    \model ->
+                        if List.isEmpty model then
+                            Err "buffer is empty"
+                        else
+                            Ok ()
                 , action = CircularBuffer.get >> Task.succeed
-                , test = \t -> ( List.head t, List.tail t |> Maybe.withDefault [] )
+                , test = \t -> Ok ( List.head t, List.tail t |> Maybe.withDefault [] )
 
                 -- TODO: combine with the precondition so we can safely destructure
                 }
             , modify1
                 { name = "put"
-                , pre = always True
+                , pre = \_ _ -> Ok ()
                 , action = CircularBuffer.put >>> Task.succeed
                 , arg = Fuzz.int
                 , test = \a t -> Ok (t ++ [ a ])

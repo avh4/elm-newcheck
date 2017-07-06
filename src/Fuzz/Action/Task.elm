@@ -88,7 +88,7 @@ readAndModify0 :
     { name : String
     , pre : test -> Result String ()
     , action : real -> Task Never ( result, real )
-    , test : test -> ( result, test )
+    , test : test -> Result String ( result, test )
     }
     -> Action real test
 readAndModify0 config =
@@ -114,7 +114,7 @@ readAndModify1 :
     , pre : arg -> test -> Result String ()
     , arg : Fuzzer arg
     , action : arg -> real -> Task Never ( result, real )
-    , test : arg -> test -> ( result, test )
+    , test : arg -> test -> Result String ( result, test )
     }
     -> Action real test
 readAndModify1 config =
@@ -141,7 +141,7 @@ readAndModify2 :
     , arg1 : Fuzzer arg1
     , arg2 : Fuzzer arg2
     , action : arg1 -> arg2 -> real -> Task Never ( result, real )
-    , test : arg1 -> arg2 -> test -> ( result, test )
+    , test : arg1 -> arg2 -> test -> Result String ( result, test )
     }
     -> Action real test
 readAndModify2 config =
@@ -161,7 +161,7 @@ action :
     , arg : Fuzzer arg
     , pre : arg -> test -> Result String ()
     , action : arg -> real -> Task Never ( result, real )
-    , test : arg -> test -> ( result, test )
+    , test : arg -> test -> Result String ( result, test )
     }
     -> Action real test
 action config =
@@ -178,14 +178,15 @@ action config =
                         |> Task.mapError never
                         |> Task.andThen
                             (\( actual, newReal ) ->
-                                let
-                                    ( expected, newTest ) =
-                                        config.test arg testModel
-                                in
-                                if actual == expected then
-                                    Task.succeed ( newReal, newTest, Just <| toString actual )
-                                else
-                                    Task.fail <| "expected " ++ toString expected ++ ", but got: " ++ toString actual
+                                case config.test arg testModel of
+                                    Err message ->
+                                        Task.fail message
+
+                                    Ok ( expected, newTest ) ->
+                                        if actual == expected then
+                                            Task.succeed ( newReal, newTest, Just <| toString actual )
+                                        else
+                                            Task.fail <| "expected " ++ toString expected ++ ", but got: " ++ toString actual
                             )
             }
     in
