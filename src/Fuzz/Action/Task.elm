@@ -1,4 +1,4 @@
-module Fuzz.Action.Task exposing (Action, modify1, readAndModify0, readAndModify1, readAndModify2, test)
+module Fuzz.Action.Task exposing (Action, Assertion(..), modify1, readAndModify0, readAndModify1, readAndModify2, test)
 
 {-| This lets you define action specifications that compare the result of
 `Tasks` with a test model.
@@ -10,7 +10,7 @@ easiest way to evaluate Task-based action specifications.
 
 ## Creating
 
-@docs Action
+@docs Action, Assertion
 @docs modify1
 @docs readAndModify0, readAndModify1, readAndModify2
 
@@ -36,8 +36,7 @@ type Action real test
 
 type alias ActionDetails real test =
     { name : String
-    , pre : test -> Result String ()
-    , go : real -> test -> Task String ( real, test, Maybe String )
+    , go : real -> test -> Result String (Task String ( real, test, Maybe String ))
     }
 
 
@@ -50,10 +49,9 @@ and returns a new value of the primary data type.
 -}
 modify1 :
     { name : String
-    , pre : arg -> test -> Result String ()
     , action : arg -> real -> Task Never real
     , arg : Fuzzer arg
-    , test : arg -> test -> Result String test
+    , test : arg -> test -> Result String (Result String test)
     }
     -> Action real test
 modify1 config =
@@ -61,9 +59,15 @@ modify1 config =
         { name = config.name
         , argDesc = toString >> List.singleton
         , arg = config.arg
-        , pre = config.pre
         , action = config.action >>> Task.map ((,) ())
-        , test = config.test >>> Result.map ((,) ())
+        , test =
+            \arg test ->
+                case config.test arg test of
+                    Ok check ->
+                        Check (\() -> check)
+
+                    Err reason ->
+                        PreconditionFailed reason
         }
 
 
@@ -81,9 +85,8 @@ and returns both a result and a new value of the primary data type.
 -}
 readAndModify0 :
     { name : String
-    , pre : test -> Result String ()
     , action : real -> Task Never ( result, real )
-    , test : test -> Result String ( result, test )
+    , test : test -> Assertion result test
     }
     -> Action real test
 readAndModify0 config =
@@ -91,10 +94,15 @@ readAndModify0 config =
         { name = config.name
         , argDesc = always []
         , arg = Fuzz.constant ()
-        , pre = always config.pre
         , action = always config.action
         , test = always config.test
         }
+
+
+{-| -}
+type Assertion result test
+    = PreconditionFailed String
+    | Check (result -> Result String test)
 
 
 {-| Creates a specification for a function of type `arg1 -> real -> Task Never (result, real)`.
@@ -106,10 +114,9 @@ and returns both a result and a new value of the primary data type.
 -}
 readAndModify1 :
     { name : String
-    , pre : arg -> test -> Result String ()
     , arg : Fuzzer arg
     , action : arg -> real -> Task Never ( result, real )
-    , test : arg -> test -> Result String ( result, test )
+    , test : arg -> test -> Assertion result test
     }
     -> Action real test
 readAndModify1 config =
@@ -117,7 +124,6 @@ readAndModify1 config =
         { name = config.name
         , argDesc = toString >> List.singleton
         , arg = config.arg
-        , pre = config.pre
         , action = config.action
         , test = config.test
         }
@@ -132,11 +138,10 @@ and returns both a result and a new value of the primary data type.
 -}
 readAndModify2 :
     { name : String
-    , pre : arg1 -> arg2 -> test -> Result String ()
     , arg1 : Fuzzer arg1
     , arg2 : Fuzzer arg2
     , action : arg1 -> arg2 -> real -> Task Never ( result, real )
-    , test : arg1 -> arg2 -> test -> Result String ( result, test )
+    , test : arg1 -> arg2 -> test -> Assertion result test
     }
     -> Action real test
 readAndModify2 config =
@@ -144,7 +149,6 @@ readAndModify2 config =
         { name = config.name
         , argDesc = \( a, b ) -> [ toString a, toString b ]
         , arg = Fuzz.map2 (,) config.arg1 config.arg2
-        , pre = \( a, b ) -> config.pre a b
         , action = \( a, b ) -> config.action a b
         , test = \( a, b ) -> config.test a b
         }
@@ -154,9 +158,8 @@ action :
     { name : String
     , argDesc : arg -> List String
     , arg : Fuzzer arg
-    , pre : arg -> test -> Result String ()
     , action : arg -> real -> Task Never ( result, real )
-    , test : arg -> test -> Result String ( result, test )
+    , test : arg -> test -> Assertion result test
     }
     -> Action real test
 action config =
@@ -166,30 +169,32 @@ action config =
                 config.name
                     ++ " "
                     ++ (String.join " " <| config.argDesc arg)
-            , pre = config.pre arg
             , go =
                 \real testModel ->
-                    config.action arg real
-                        |> Task.mapError never
-                        |> Task.andThen
-                            (\( actual, newReal ) ->
-                                case config.test arg testModel of
-                                    Err message ->
-                                        Task.fail message
+                    case config.test arg testModel of
+                        PreconditionFailed reason ->
+                            Err reason
 
-                                    Ok ( expected, newTest ) ->
-                                        if actual == expected then
-                                            Task.succeed
-                                                ( newReal
-                                                , newTest
-                                                , if toString actual == "()" then
-                                                    Nothing
-                                                  else
-                                                    Just (toString actual)
-                                                )
-                                        else
-                                            Task.fail <| "expected " ++ toString expected ++ ", but got: " ++ toString actual
-                            )
+                        Check useResult ->
+                            config.action arg real
+                                |> Task.mapError never
+                                |> Task.andThen
+                                    (\( actual, newReal ) ->
+                                        case useResult actual of
+                                            Err message ->
+                                                Task.fail message
+
+                                            Ok newTest ->
+                                                Task.succeed
+                                                    ( newReal
+                                                    , newTest
+                                                    , if toString actual == "()" then
+                                                        Nothing
+                                                      else
+                                                        Just (toString actual)
+                                                    )
+                                    )
+                                |> Ok
             }
     in
     config.arg
@@ -208,9 +213,9 @@ run :
 run action previousResult =
     case previousResult of
         ( real, test, log ) ->
-            case action.pre test of
-                Ok () ->
-                    action.go real test
+            case action.go real test of
+                Ok task ->
+                    task
                         |> Task.mapError (\reason -> { log | failure = Just { name = action.name, message = reason } })
                         |> Task.map
                             (\( newReal, newTest, output ) ->

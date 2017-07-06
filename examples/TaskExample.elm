@@ -16,23 +16,26 @@ main =
         , actions =
             [ readAndModify0
                 { name = "get"
-                , pre =
-                    \model ->
-                        if List.isEmpty model then
-                            Err "buffer is empty"
-                        else
-                            Ok ()
                 , action = CircularBuffer.get >> Task.succeed
-                , test = \t -> Ok ( List.head t, List.tail t |> Maybe.withDefault [] )
+                , test =
+                    \model ->
+                        case model of
+                            [] ->
+                                PreconditionFailed "buffer is empty"
 
-                -- TODO: combine with the precondition so we can safely destructure
+                            first :: rest ->
+                                Check <|
+                                    \actual ->
+                                        if actual == Just first then
+                                            Ok rest
+                                        else
+                                            Err ""
                 }
             , modify1
                 { name = "put"
-                , pre = \_ _ -> Ok ()
                 , action = CircularBuffer.put >>> Task.succeed
                 , arg = Fuzz.int
-                , test = \a t -> Ok (t ++ [ a ])
+                , test = \a t -> Ok (Ok (t ++ [ a ]))
                 }
             ]
         }
