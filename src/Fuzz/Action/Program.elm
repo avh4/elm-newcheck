@@ -96,14 +96,14 @@ program config =
 view : Model test -> Element Class Variation msg
 view model =
     model.runs
-        -- |> List.filter (\log -> log.failure /= Nothing)
         |> List.reverse
         |> List.map viewRun
         |> Element.column TestRuns []
 
 
 type Class
-    = TestRuns
+    = Plain
+    | TestRuns
     | TestRunContainer
     | TestRun
     | Log
@@ -128,7 +128,17 @@ viewRun log =
         , vary Passed (log.failure == Nothing)
         , padding 8
         ]
-        (viewLog log)
+        (Element.column Plain
+            []
+            [ log.steps
+                |> List.reverse
+                |> List.map (.name >> String.split " " >> List.head >> Maybe.withDefault "")
+                |> String.join ", "
+                |> (\x -> "[" ++ x ++ "]")
+                |> Element.text
+            , viewLog log
+            ]
+        )
         |> Element.el TestRunContainer [ padding 2 ]
 
 
@@ -153,7 +163,7 @@ viewLog log =
     Element.column Log
         []
         [ Element.el LogInit [] (Element.text <| toString log.init)
-        , Element.column LogSteps [] (List.map viewStep log.steps)
+        , Element.column LogSteps [] (List.map viewStep <| List.reverse log.steps)
         , log.failure |> Maybe.map viewFailure |> Maybe.withDefault Element.empty
         ]
 
